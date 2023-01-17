@@ -1,3 +1,12 @@
+# Something about the fork
+
+This fork of dEAduction is essentially dedicated for improving lauching scripts.
+You can see all unstable changes on the dev branch.
+
+Please Note that windows is not the intended operating system for the application.
+Therefore if you want to test out the running script of windows, please ensure the repo is on the C drive.
+The reason for that is beacause this software is intended to work on a Unix based file manager, it is not able to work on drive based file manager like windows
+
 # d∃∀duction
 
 ## Core team
