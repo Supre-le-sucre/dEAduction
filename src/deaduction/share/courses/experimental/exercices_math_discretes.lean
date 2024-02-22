@@ -2,9 +2,9 @@
 import tactic
 
 -- dEAduction tactics
+-- structures2 and utils are vital
 import structures2      -- hypo_analysis, targets_analysis
 import utils            -- no_meta_vars
-import user_notations   -- notations that can be used in deaduction UI for a new object
 import push_neg_once
 
 -- dEAduction definitions
@@ -32,9 +32,9 @@ Title
 Author
     Alice Laroche
 Institution
-    
-AvailableMagic
-    ALL
+    Sorbonne Université
+AvailableCompute
+    NONE
 Description
     Exercices d'un cours de maths discrètes à Sorbonne Université.
     Les numéros de questions font référence à la feuille de TD.
@@ -102,7 +102,7 @@ local attribute [instance] classical.prop_decidable
 -- global parameters = implicit variables --
 ---------------------------------------------
 section course
-parameters {X Y Z: Type}
+variables {X Y Z: Type}
 
 open set
 open relation
@@ -241,13 +241,24 @@ begin
     exact iff.rfl,
 end
 
-lemma definition.intersection_union (A B C : set X) :
+lemma definition.union_deux_ensembles {A B : set X} {x : X} :
+x ∈ A ∪ B ↔ ( x ∈ A ∨ x ∈ B) :=
+/- dEAduction
+PrettyName
+    Union de deux ensembles
+ImplicitUse
+    True
+-/
+begin
+    exact iff.rfl,
+end
+
+
+lemma theorem.intersection_union (A B C : set X) :
 A ∩ (B ∪ C) = (A ∩ B) ∪ (A ∩ C) :=
 /- dEAduction
 PrettyName
    Intersection avec une union
-ImplicitUse
-    True
 -/
 begin
   exact set.inter_distrib_left A B C,
@@ -448,11 +459,13 @@ PrettyName
 -- end
 
 
-lemma definition.produit_de_parties {A : set X} {B : set Y} {x:X} {y:Y} :
-(x,y) ∈ set.prod A B ↔ x ∈ A ∧ y ∈ B :=
+lemma definition.produit_de_parties {A : set X} {B : set Y} {a: X × Y}:
+a ∈ set.prod A B ↔ ∃x ∈ A, ∃y ∈ B, a= (x,y) :=
 /- dEAduction
 PrettyName
     Produit cartésien de deux parties
+ImplicitUse
+    False
 -/
 begin
     todo
@@ -751,6 +764,9 @@ PrettyName
     Question 5
 -/ 
 begin
+    -- rw generalites.definition.double_inclusion, split,
+    -- intros x Hx,
+    -- hypo_analysis,
     todo,
 end
 

@@ -69,16 +69,9 @@ else:
     print('path DOES NOT exist')
 
 if USER_CONFIG_FILE_PATH.exists():
-    __dict_user.update(toml.load(str(USER_CONFIG_FILE_PATH)))
-
-
-def save():
-    global __dict_factory
-    global __dict_user
-
-    log.info(_("Saving configuration file"))
-    with open(str(USER_CONFIG_FILE_PATH), "w") as fhandle:
-        toml.dump(__dict_user, fhandle)
+    # __dict_user.update(toml.load(str(USER_CONFIG_FILE_PATH)))
+    with open(str(USER_CONFIG_FILE_PATH), 'rb') as f:
+        __dict_user.update(toml.loads(f.read().decode('utf-8')))
 
 
 def get(k: str, default_value=None):
@@ -129,6 +122,47 @@ def copy():
 def restore(initial_cvars):
     global __dict_user
     __dict_user = initial_cvars
+
+
+def update(new_settings: dict):
+    if new_settings:
+        for (key, value) in new_settings.items():
+            set(key, value)
+
+
+def save():
+    global __dict_factory
+    global __dict_user
+
+    log.info(_("Saving configuration file"))
+    with open(str(USER_CONFIG_FILE_PATH),
+              mode="w", encoding='utf-8') as fhandle:
+        toml.dump(__dict_user, fhandle)
+
+
+def save_single_key(key):
+    """
+    Add to the current USER_CONFIG_FILE_PATH a single entry.
+    Does not affect the current __dict_user!
+    """
+
+    value = get(key)
+    global __dict_user
+    tmp_dict_user = dict()
+
+    # Read usr config file
+    if USER_CONFIG_FILE_PATH.exists():
+        with open(str(USER_CONFIG_FILE_PATH), 'rb') as f:
+            tmp_dict_user.update(toml.loads(f.read().decode('utf-8')))
+
+    # Add entry to be saved
+    udict.dotset(tmp_dict_user, key, value, if_not_exists=False)
+
+    # Save new dict
+    log.debug(_(f"Saving {key}:{value} in config file"))
+    with open(str(USER_CONFIG_FILE_PATH),
+              mode="w", encoding='utf-8') as fhandle:
+        toml.dump(tmp_dict_user, fhandle)
 
 
 # Add os name; so this can be overridden in (user's) config.toml

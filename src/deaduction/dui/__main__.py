@@ -52,6 +52,7 @@ import qtrio
 import deaduction.pylib.config.dirs              as     cdirs
 import deaduction.pylib.config.environ           as     cenv
 import deaduction.pylib.config.site_installation as     inst
+import deaduction.pylib.config.course            as     ccourses
 import deaduction.pylib.config.vars              as     cvars
 ###################
 # ! DO NOT MOVE ! #
@@ -70,11 +71,10 @@ from deaduction.pylib.coursedata                 import Exercise
 from deaduction.pylib                            import logger
 from deaduction.pylib.server                     import ServerInterface
 from deaduction.pylib.autotest import                   select_exercise
+from deaduction.pylib.math_display.pattern_data import *
 
 global _
 
-# For debug
-from deaduction.pylib.math_display.pattern_data import *
 
 log = logging.getLogger(__name__)
 
@@ -111,18 +111,30 @@ def set_logger():
         #                'ServerInterface', 'ServerQueue']
         log_domains = ["__main__",
                        'ServerInterface',
-                       # 'ServerQueue',
+                       'HighLevelServerRequest',
+                       'ServerQueue',
                        # 'lean',
-                       'deaduction.dui',
-                       # 'deaduction.pylib',
-                       'logic',
-                       'magic',
-                       'coursedata',
-                       'deaduction.pylib',
-                       'patterns'
+                       # Includes Coordinator, start_coex:
+                       'deaduction.dui.stages',
+                       'deaduction.dui.elements',
+                       # 'deaduction.pylib'
+                       'deaduction.pylib.actions',
+                       # 'deaduction.pylib.coursedata',
+                       'deaduction.pylib.editing',
+                       'deaduction.pylib.pattern_math_obj',
+                       'deaduction.pylib.marked_pattern_math_obj',
+                       # 'logic',
+                       # 'magic',
+                       # 'coursedata',
+                       'deaduction.pylib.math_display.math_cursor',
+                       # 'patterns'
                        # 'math_object'
                        ]
-        # log_domains = [""]
+        # log_domains = ["ServerInterface", "HighLevelServerRequest",
+        #                "ServerQueue",
+        #                "deaduction.dui.stages.start_coex",
+        #                "deaduction.dui.stages.exercise",
+        #                ]
 
     logger.configure(domains=log_domains,
                      display_level=log_level,
@@ -252,6 +264,7 @@ class InstallDependenciesStage(QObject):
     def really_quit(self, reason: str):
         # log.debug("really_quit")
         msg_box = QMessageBox()
+        msg_box.setWindowTitle('d∃∀duction')
         msg_box.setText(_("Quitting d∃∀duction"))
         msg_box.setInformativeText(reason)
         msg_box.exec()
@@ -327,8 +340,8 @@ def erase_lean():
     """
     Erase Lean and Mathlib. For debugging only.
     """
-    lean_dir = cdirs.lean
-    mathlib_dir = cdirs.mathlib
+    lean_dir = cdirs.local_lean
+    mathlib_dir = cdirs.local_mathlib
     if lean_dir.exists():
         log.debug("Erasing Lean")
         rmtree(str(lean_dir), ignore_errors=True)
@@ -368,7 +381,7 @@ def language_check():
         cvars.set('i18n.select_language', selected_language)
         deaduction.pylib.config.i18n.init_i18n()
         if ok:
-            cvars.save()  # Do not ask next time!
+            cvars.save_single_key('i18n.select_language')  # Do not ask next time!
 
 
 def copy_lean_files_to_home():
@@ -393,6 +406,14 @@ def copy_lean_files_to_home():
         rmtree(str(usr_lean_src_dir), ignore_errors=True)
     copytree(str(lean_src_dir),
              str(usr_lean_src_dir),
+             ignore_dangling_symlinks=True)
+    # Copy autotests:
+    pkg_tests_dir = cdirs.pkg_tests_dir
+    usr_tests_dir = cdirs.usr_tests_dir
+    if usr_tests_dir.exists():
+        rmtree(str(usr_tests_dir), ignore_errors=True)
+    copytree(str(pkg_tests_dir),
+             str(usr_tests_dir),
              ignore_dangling_symlinks=True)
 
 
@@ -444,6 +465,7 @@ def adapt_to_new_version():
         copy_lean_files_to_home()
         log.debug("Erasing previous initial proof states")
         erase_proof_states()
+        ccourses.erase_recent_courses()
         # Create empty dir again:
         cdirs.init()
         # Write new version nb in usr config.toml:
@@ -524,7 +546,7 @@ class WindowManager(QObject):
         """
 
         log.info("Choosing new exercise")
-
+        # trio.sleep(0)  # Give time to save
         if not self.chooser_window:
             # Start chooser window
             self.chooser_window = StartCoExStartup(exercise=self.exercise,
@@ -547,17 +569,61 @@ class WindowManager(QObject):
             # Show window
             self.chooser_window.show()
         else:
+            # If hidden (by 'esc' key)
+            if self.chooser_window.isHidden():
+                self.chooser_window.show()
+
             # Focus on chooser window
             self.chooser_window.raise_()
             self.chooser_window.activateWindow()
+
+    def check_course_file(self, course) -> bool:
+        """
+        Check that course file name will not raise an import error.
+        """
+        path = course.abs_course_path
+        lean_env = self.servint.lean_env
+        other = lean_env.other_file_with_same_name(abs_path=path)
+        if other and not other.parent == cdirs.tmp_exercises_dir:
+            dialog = QMessageBox()  # title=_('File selector')
+            dialog.setWindowTitle(_('Ambiguous name ') + '— d∃∀duction')
+            txt = _("File has the same name as \n{}.").format(other)
+            txt += _("\nChange the name of one of the two files and try again.")
+            det_txt = _("This will raise an import error from Lean. "
+                        "If you insist on not changing names, then go to the "
+                        "settings window, select the advanced tab and set "
+                        "the Lean requests method to 'Normal'.")
+            dialog.setDetailedText(det_txt)
+            dialog.setText(txt)
+            dialog.setIcon(QMessageBox.Warning)
+            ok_btn = dialog.addButton(QMessageBox.Ok)
+            abort_btn = dialog.addButton(QMessageBox.Cancel)
+            show_dtls_btn = dialog.buttons()[0]
+            show_dtls_btn.setText(_("Show details") + "...")
+            abort_btn.setText(_("Cancel"))
+            ok_btn.setText(_("Proceed anyway"))
+            dialog.exec_()
+            if dialog.clickedButton() != ok_btn:
+                return False
+
+        lean_env.check_file_path(abs_path=path)
+        return True
 
     @Slot()
     def start_exercise(self, exercise):
         """
         Just a front-end to the solve_exercise method.
         """
+
         # TODO: might be merged with solve_exercise, no more async
         #  but cf tests
+
+        # Check course file
+        if not self.check_course_file(exercise.course):
+            return
+
+        # log.debug("Exercise chosen, closing window")
+        self.chooser_window.close()
         self.chooser_window = None  # So that exiting d∃∀duction works
         self.exercise = exercise
         if self.exercise_window:
@@ -568,6 +634,7 @@ class WindowManager(QObject):
                 self.exercise_window.close()
             except RuntimeError:
                 pass
+
         # Do start exercise!
         self.solve_exercise()
 
@@ -595,16 +662,16 @@ class WindowManager(QObject):
         - setting test_mode,
         - connecting proof_no_goal signal to test_complete.
         """
-        # FIXME: adapt to new methods!!
-        # TODO: box for cancelling auto_test (reprendre la main)
+
         log.debug(f"Preparing {self.exercise.pretty_name} for test")
 
         # Start exercise window and test window
-        self.coordinator = Coordinator(self.exercise, self.servint)
+        self.coordinator = Coordinator(self.exercise, self.servint,
+                                       test_mode=True)
         self.test_window = test_window
         self.test_window.show()
-        self.exercise_window.test_mode = True
-        self.coordinator.test_mode = True
+        # self.exercise_window.test_mode = True
+        # self.coordinator.test_mode = True
 
         # Connect signals
         self.exercise_window.window_closed.connect(self.exercise_window_closed)
@@ -645,21 +712,22 @@ def exercise_from_argv() -> Exercise:
 ##################################################################
 async def main():
     """
-    This is the main loop. It opens a trio.nursery, instantiate a Container
-    for signals and slots, and call the Container.choose_exercise method.
+    This is the main loop. It opens a trio.nursery, instantiate a WindowManager
+    for signals and slots, and call the WindowManager.choose_exercise method.
     Then it listens to signals emitted when windows are closed, and decides
     to quit when all windows are closed. Quitting implies stopping the lean
     server that may be running and closing the trio's nursery.
     """
 
     async with trio.open_nursery() as nursery:
+        # Check language
+        language_check()
+
         # Check Lean and mathlib install
         ok = await site_installation_check()
         # print(f"ok={ok}")
         if not ok:
             nursery.cancel_scope.cancel()
-        # Check language
-        language_check()
 
         # Check if version has changed. Anyway, add lean_src if not exist.
         adapt_to_new_version()

@@ -25,8 +25,10 @@ This file is part of d∃∀duction.
     along with d∃∀duction. If not, see <https://www.gnu.org/licenses/>.
 """
 
-from PySide2.QtCore    import Slot
-from PySide2.QtWidgets import QMessageBox
+from PySide2.QtCore    import Slot, Qt, QTimer
+from PySide2.QtWidgets import QMessageBox, QCheckBox, QDialogButtonBox
+
+import deaduction.pylib.config.vars as cvars
 
 global _
 
@@ -63,6 +65,8 @@ class YesNoDialog(QMessageBox):
         """
 
         super().__init__()
+        # (Bad) default title
+        self.setWindowTitle(_("Yes or no? — d∃∀duction"))
         self.setModal(True)
 
         self.__yes = False
@@ -70,8 +74,8 @@ class YesNoDialog(QMessageBox):
         self.addButton(QMessageBox.No)
         self.addButton(QMessageBox.Yes)
         self.button(QMessageBox.Yes).clicked.connect(self._set_yes_True)
-        self.setButtonText(QMessageBox.Yes, _("Yes"))
-        self.setButtonText(QMessageBox.No, _("No"))
+        # self.setButtonText(QMessageBox.Yes, _("Yes"))
+        # self.setButtonText(QMessageBox.No, _("No"))
 
     @Slot()
     def _set_yes_True(self):
@@ -97,3 +101,56 @@ class YesNoDialog(QMessageBox):
         """
 
         return not self.__yes
+
+
+class DeaductionDialog(QMessageBox):
+    """
+    Generic Deaduction dialog.
+    """
+    def __init__(self, title="d∃∀duction", html=True, OK=True):
+
+        super().__init__()
+        self.setTextFormat(Qt.RichText)
+
+        if not title.endswith("d∃∀duction"):
+            title += " — d∃∀duction"
+        self.setWindowTitle(title)
+        # self.setModal(True)
+
+        if OK:
+            self.addButton(QMessageBox.Ok)
+
+
+class DeaductionTutorialDialog(DeaductionDialog):
+    """
+    This class is a modal QMessageBox which displays a tutorial-like message.
+    The message can be dismissed forever by checking the "do not play again"
+    button.
+    """
+
+    def __init__(self,
+                 config_name,
+                 title="Tutorial — d∃∀duction",
+                 text=None):
+        super().__init__(title=title)
+
+        self.config_name = config_name
+        if config_name:
+            show = cvars.get(config_name)
+            if show is False:
+                QTimer.singleShot(0, self.reject)
+        if text:
+            self.setText(text)
+
+        # self.dismiss_checkbox = QCheckBox(_("Do not show again"))
+        # self.addButton(self.dismiss_checkbox, QMessageBox.HelpRole)
+
+        self.dismiss_button = self.addButton(_("Do not show again"),
+                                             QMessageBox.HelpRole)
+
+        self.dismiss_button.clicked.connect(self.dismiss)
+
+    def dismiss(self):
+        cvars.set(self.config_name, False)
+        cvars.save_single_key(self.config_name)
+
